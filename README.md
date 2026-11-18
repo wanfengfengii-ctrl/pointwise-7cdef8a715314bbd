@@ -50,3 +50,32 @@ verified = verify_delivery_bundle(bundle)
 回放按位置取 p_i 或 1-p_i，保存全部实际分配概率及其精确乘积。零概率路径拒绝发布。S 为 A 臂成功数减 B 臂成功数。固定零假设保留每个位置的响应，用预定概率累加所有反事实分配的 S 分布。报告的双尾质量包含与观察绝对统计量相等的边界。`analyze_fixed(revision)` 联合发布回放和报告，返回 `(replay, report)`。`replay_fixed` 和 `test_fixed` 也可以分别使用。
 
 成功成果绑定确切设计、试验及回放。`read_report` 检查编码、父链和数值自洽，返回独立副本。`export_report` 生成版本化 JSON 对象。离线入口从包内计划和记录重算路径、统计量、完整分布和尾质量。指纹用于输入一致性检查。报告写入异常回滚本次事务。在诊断写入失败时，可用 `archive.publication.fail_at('report_header')` 或 `archive.publication.fail_at('report_distribution')` 启用一次保存故障并检查恢复。
+
+## 自适应批次试验
+
+分析员还可以登记按响应调整分配的设计，保存实际路径回放并发布按停止长度条件化的精确报告。
+
+```python
+from trial.archive import TrialArchive
+
+with TrialArchive.open('trials.db') as archive:
+    design_id = archive.save_adaptive(1, 1, 6, 4, 4)
+    replay = archive.replay_adaptive(design_id, [1, 1, 1, 1], 'AAAA')
+    report = archive.test_adaptive(replay['id'])
+    saved_replay = archive.read_adaptive_replay(replay['id'])
+    saved_report = archive.read_adaptive_report(report['id'])
+```
+
+`save_adaptive(initial_a, initial_b, horizon, min_n, boundary)` 登记不可变设计并返回正整数 `design_id`，每次合法登记产生独立身份。初始球数与界值为正整数，`2 <= min_n <= horizon <= 18`，所有整数参数排除布尔值。
+
+`replay_adaptive(design_id, responses, assignments)` 按到达顺序接收响应列表（非布尔整数 0 或 1）和分配序列（字符串或单字符列表），两序列同长。每步按当前球数比例分配：成功给本臂加球、失败给另一臂加球，分配概率在本步响应影响球数之前取得。S 从 0 开始，A 成功加 1、B 成功减 1、失败保持。从第 `min_n` 批起，首次 `abs(S) >= boundary` 即停，否则到 `horizon` 停止。合法记录必须恰好结束于首次停止时点；未达终点、停止后仍有记录或输入非法时整次拒绝，不发布任何内容。回放字典含 `id`、`design_id`、`design`、`responses`、`assignments`、逐步的 `steps`（`position`、分配前球数 `before`、实际分配的 Fraction `probability`、本步后的 `statistic`）、全部实际分配概率之积 `path_probability` 及最终 `statistic`。
+
+`test_adaptive(replay_id)` 在尖锐零假设下固定各批次已观测响应，按反事实历史重算球数、分配概率、S 与停止资格，只计首次终结于实际长度 n 的路径（此前已终止或 n 批后仍能继续的路径都不计入），不请求 n 之后的响应。报告字典含 `id`、`replay_id`、`observed_statistic`、`stop_mass`（P(N=n)）、`joint_tail_mass`（P(N=n 且 |S|≥|S_obs|)，尾部含等号）及 `conditional_tail`（联合质量除以停止质量），三项均为 Fraction。回放向检验交接反事实历史的概率与首次终结资格，两种质量基于同一个终结事件：实际路径必然属于该事件，故 `path_probability <= joint_tail_mass <= stop_mass <= 1` 且 `conditional_tail * stop_mass == joint_tail_mass`。
+
+`read_adaptive_replay(replay_id)` 与 `read_adaptive_report(report_id)` 按保存值返回独立副本，读取不重走路径也不重做检验。身份为正整数且排除布尔值，格式非法抛 ValueError，合法但不存在抛 KeyError。用 `replay_adaptive` 再提交一份合法记录即登记更正，可引用原设计或另一明确设计；修改输入列表或返回值、登记更正、关闭重开都不改变已保存的旧成果。每次发布沿用原子失败边界，`archive.publication.fail_at('report_header')` 可核验新报告写入后回滚，原回放和旧报告仍可读取，重试可正常产生报告。旧数据库打开时自动补齐自适应表，固定设计接口、CLI、交付包行为不变。
+
+```sh
+python3 -B -m examples.adaptive_cases
+```
+
+固定样例覆盖：上限即停止长度（质量 1、2/5、2/5）、上限放宽后恰在四批终结的只有 AAAA 与 BBBB（2/5、2/5、1）、更早停止的路径不参加本报告（1/3、1/5、3/5）、混合响应（5/12、5/12、1）以及更正后读回旧成果。`tests/test_adaptive.py` 中的 `oracle_masses` 与 `oracle_path` 提供独立的短路径核账，逐路径枚举全部反事实分配并核对停止质量、联合尾部质量与条件尾部。

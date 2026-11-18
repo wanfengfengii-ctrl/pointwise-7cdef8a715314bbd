@@ -3,5 +3,5 @@
   "kind": "cli",
   "setup": [],
   "verify": ["python3", "-B", "-m", "unittest", "discover", "-s", "tests", "-t", ".", "-v"],
-  "demo": ["python3", "-B", "-m", "trial.archive", "demo", "examples/day.json"]
+  "demo": ["python3", "-B", "-m", "examples.adaptive_cases"]
 }

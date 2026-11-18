@@ -6,6 +6,8 @@ from fractions import Fraction
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from .adaptive_service import AdaptiveService
+from .adaptive_store import AdaptiveDesignStore, AdaptiveReplayStore, AdaptiveReportStore
 from .analysis_input import fixed_input_from_binding
 from .bindings import BindingStore
 from .codec import canonical_json, decode_fraction, encode_fraction, load_json, require_fields
@@ -37,10 +39,15 @@ class TrialArchive:
         self._bindings = BindingStore(connection, self._designs, self._observations)
         self._replays = ReplayStore(connection)
         self._reports = ReportStore(connection, self.publication)
+        self._adaptive_designs = AdaptiveDesignStore(connection)
+        self._adaptive_replays = AdaptiveReplayStore(connection)
+        self._adaptive_reports = AdaptiveReportStore(connection, self.publication)
         self.design = DesignService(self._designs, self.publication)
         self.observations = ObservationService(self._observations, self._designs, self.publication)
         self.replay = ReplayService(self._bindings, self._replays, self.publication)
         self.inference = InferenceService(self._bindings, self._replays, self._reports, self.publication)
+        self.adaptive = AdaptiveService(self._adaptive_designs, self._adaptive_replays,
+                                        self._adaptive_reports, self.publication)
 
     @classmethod
     def open(cls, database):
@@ -119,6 +126,21 @@ class TrialArchive:
 
     def export_report(self, report_id):
         return build_delivery_bundle(*self._read_evidence(report_id))
+
+    def save_adaptive(self, initial_a, initial_b, horizon, min_n, boundary):
+        return self.adaptive.save_adaptive(initial_a, initial_b, horizon, min_n, boundary)
+
+    def replay_adaptive(self, design_id, responses, assignments):
+        return self.adaptive.replay_adaptive(design_id, responses, assignments)
+
+    def test_adaptive(self, replay_id):
+        return self.adaptive.test_adaptive(replay_id)
+
+    def read_adaptive_replay(self, replay_id):
+        return self.adaptive.read_adaptive_replay(replay_id)
+
+    def read_adaptive_report(self, report_id):
+        return self.adaptive.read_adaptive_report(report_id)
 
 
 def _read_day(path):

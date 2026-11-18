@@ -71,6 +71,41 @@ _TABLES = {
         mass TEXT NOT NULL,
         PRIMARY KEY (report_id, statistic)
     )''',
+    'adaptive_designs': '''CREATE TABLE adaptive_designs (
+        id INTEGER PRIMARY KEY,
+        initial_a INTEGER NOT NULL CHECK (initial_a > 0),
+        initial_b INTEGER NOT NULL CHECK (initial_b > 0),
+        horizon INTEGER NOT NULL CHECK (horizon BETWEEN 2 AND 18),
+        min_n INTEGER NOT NULL CHECK (min_n BETWEEN 2 AND 18),
+        boundary INTEGER NOT NULL CHECK (boundary > 0),
+        CHECK (min_n <= horizon)
+    )''',
+    'adaptive_replays': '''CREATE TABLE adaptive_replays (
+        id INTEGER PRIMARY KEY,
+        design_id INTEGER NOT NULL REFERENCES adaptive_designs (id),
+        length INTEGER NOT NULL CHECK (length BETWEEN 1 AND 18),
+        path_probability TEXT NOT NULL,
+        statistic INTEGER NOT NULL CHECK (statistic BETWEEN -18 AND 18)
+    )''',
+    'adaptive_replay_steps': '''CREATE TABLE adaptive_replay_steps (
+        replay_id INTEGER NOT NULL REFERENCES adaptive_replays (id),
+        position INTEGER NOT NULL CHECK (position BETWEEN 1 AND 18),
+        assignment TEXT NOT NULL CHECK (assignment IN ('A', 'B')),
+        response INTEGER NOT NULL CHECK (response IN (0, 1)),
+        balls_a INTEGER NOT NULL CHECK (balls_a > 0),
+        balls_b INTEGER NOT NULL CHECK (balls_b > 0),
+        probability TEXT NOT NULL,
+        statistic INTEGER NOT NULL CHECK (statistic BETWEEN -18 AND 18),
+        PRIMARY KEY (replay_id, position)
+    )''',
+    'adaptive_reports': '''CREATE TABLE adaptive_reports (
+        id INTEGER PRIMARY KEY,
+        replay_id INTEGER NOT NULL REFERENCES adaptive_replays (id),
+        statistic INTEGER NOT NULL CHECK (statistic BETWEEN -18 AND 18),
+        stop_mass TEXT NOT NULL,
+        joint_tail_mass TEXT NOT NULL,
+        conditional_tail TEXT NOT NULL
+    )''',
 }
 
 
@@ -79,6 +114,9 @@ def _tables(connection):
         "SELECT name, sql FROM sqlite_schema WHERE type = 'table' AND substr(name, 1, 7) <> 'sqlite_'"
     )
     return dict(rows)
+
+
+_ADAPTIVE_TABLES = ('adaptive_designs', 'adaptive_replays', 'adaptive_replay_steps', 'adaptive_reports')
 
 
 def validate_schema_version(connection):
@@ -111,6 +149,11 @@ def initialize_schema(connection):
             for sql in _TABLES.values():
                 connection.execute(sql)
             connection.execute(f'PRAGMA user_version = {SCHEMA_VERSION}')
+        elif version == SCHEMA_VERSION:
+            actual = _tables(connection)
+            for name in _ADAPTIVE_TABLES:
+                if name not in actual:
+                    connection.execute(_TABLES[name])
         validate_schema_version(connection)
         connection.commit()
     except BaseException:
