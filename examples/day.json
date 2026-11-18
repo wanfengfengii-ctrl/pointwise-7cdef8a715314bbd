@@ -1,0 +1,11 @@
+{
+  "design_id": "river-fair",
+  "trial_id": "clarification-day",
+  "probabilities": [["1", "2"], ["1", "2"], ["1", "2"], ["1", "2"]],
+  "records": [
+    {"batch_id": "Z", "position": 1, "assignment": "A", "response": 1},
+    {"batch_id": "A", "position": 2, "assignment": "A", "response": 1},
+    {"batch_id": "M", "position": 3, "assignment": "A", "response": 1},
+    {"batch_id": "B", "position": 4, "assignment": "A", "response": 1}
+  ]
+}
